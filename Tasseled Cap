@@ -1,0 +1,91 @@
+
+var calculateTasseledCap = function (image){
+  var b = image.select("B1", "B2", "B3", "B4", "B5", "B7");
+  //Coefficients are only for Landsat 8 TOA
+	var brightness_coefficents= ee.Image([0.3561,0.3972,0.3904,0.6966,0.2286,0.1596]);
+  var greenness_coefficents= ee.Image([-0.3344,-0.3544,-0.4556,-0.6966,-0.0242,-0.2630]);
+  var wetness_coefficents= ee.Image([0.2626,0.2141,0.0926,0.0656,-0.7629,-0.5388]);
+  var fourth_coefficents= ee.Image([0.0805, -0.0498, 0.1950, -0.1327, 0.5752, -0.7775]);
+  var fifth_coefficents= ee.Image([-0.7252, -0.0202, 0.6683, 0.0631, -0.1494, -0.0274]);
+  var sixth_coefficents= ee.Image([0.4000, -0.8172, 0.3832, 0.0602, -0.1095, 0.0985]);
+
+	var brightness = image.expression(
+			'(B * BRIGHTNESS)',
+			{
+				'B':b,
+				'BRIGHTNESS': brightness_coefficents
+				}
+			);
+  var greenness = image.expression(
+    '(B * GREENNESS)',
+			{
+				'B':b,
+				'GREENNESS': greenness_coefficents
+				}
+			);
+  var wetness = image.expression(
+    '(B * WETNESS)',
+			{
+				'B':b,
+				'WETNESS': wetness_coefficents
+				}
+			);
+  var fourth = image.expression(
+      '(B * FOURTH)',
+        {
+          'B':b,
+          'FOURTH': fourth_coefficents
+          }
+        );
+  var fifth = image.expression(
+      '(B * FIFTH)',
+        {
+          'B':b,
+          'FIFTH': fifth_coefficents
+          }
+        );
+  var sixth = image.expression(
+    '(B * SIXTH)',
+    {
+      'B':b,
+      'SIXTH': sixth_coefficents
+      }
+    );
+  brightness = brightness.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+	greenness = greenness.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+	wetness = wetness.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+	fourth = fourth.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+	fifth = fifth.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+  sixth = sixth.clip(StudyArea).reduce(ee.call("Reducer.sum"));
+  var tasseled_cap = ee.Image(brightness).addBands(greenness).addBands(wetness)
+                             .addBands(fourth)
+                             .addBands(fifth)
+                             .addBands(sixth).rename('brightness','greenness','wetness','fourth','fifth','sixth');
+  return tasseled_cap;
+};
+//
+var visualization ={
+ bands: ['brightness', 'greenness','wetness'],
+ min: 0.0,
+ max: 0.3,
+};
+//var country_mask = ee.FeatureCollection(3513341).filter(ee.Filter.or(ee.Filter.eq('Country','Mexico')));
+var landsat8_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_TOA')
+        .filterDate('2020-01-01', '2020-04-19')
+        .filterMetadata('CLOUD_COVER', 'less_than', 3)
+        .filterBounds(StudyArea);
+        // .focalMean(2, 'square', 'pixels', 8);
+//var landsat8_collection_fil = ee.landsat8_collection.focalMean(2, 'square', 'pixels', 8);
+var landsat8_tasseled_cap = landsat8_collection.map(calculateTasseledCap);
+//console.log(landsat8_tasseled_cap.getInfo()).addToMap(landsat8_tasseled_cap,{},'Landsat 8 Tasseled Cap');
+Map.addLayer(landsat8_tasseled_cap,visualization, 'Landsat 8');
+Map.centerObject(roi,8);
+Export.image.toDrive({
+  image: landsat8_tasseled_cap.select('greenness').sum(),
+  scale: 30,
+  description: 'Tassled_cap',
+  folder: 'RS_APPS',
+  fileNamePrefix: 'TC_2020',
+  region: StudyArea,
+  fileFormat: 'GeoTIFF'
+});
