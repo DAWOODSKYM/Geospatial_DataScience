@@ -1,7 +1,14 @@
-
+//The Tasseled Cap transformation is designed to analyze and map vegetation and urban development changes detected by various satellite sensor systems. It is // known as the Tasseled Cap transformation due to the shape of the graphical distribution of data. It was developed in 1976 by R.J. Kauth and G.S. Thomas of //the Environmental Research Institute of Michigan (ERIM).
+//Loading data- Ensure to import your study area and lable the table Study Area
+var landsat8_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_TOA')
+        .filterDate('2020-01-01', '2020-04-19')
+        .filterMetadata('CLOUD_COVER', 'less_than', 3)
+        .filterBounds(StudyArea);
+//Tassled cap calculation	
 var calculateTasseledCap = function (image){
   var b = image.select("B1", "B2", "B3", "B4", "B5", "B7");
   //Coefficients are only for Landsat 8 TOA
+  // Coefficients vary for different sensors - ensure to change this when using a different sensor
 	var brightness_coefficents= ee.Image([0.3561,0.3972,0.3904,0.6966,0.2286,0.1596]);
   var greenness_coefficents= ee.Image([-0.3344,-0.3544,-0.4556,-0.6966,-0.0242,-0.2630]);
   var wetness_coefficents= ee.Image([0.2626,0.2141,0.0926,0.0656,-0.7629,-0.5388]);
@@ -69,17 +76,11 @@ var visualization ={
  min: 0.0,
  max: 0.3,
 };
-//var country_mask = ee.FeatureCollection(3513341).filter(ee.Filter.or(ee.Filter.eq('Country','Mexico')));
-var landsat8_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_TOA')
-        .filterDate('2020-01-01', '2020-04-19')
-        .filterMetadata('CLOUD_COVER', 'less_than', 3)
-        .filterBounds(StudyArea);
-        // .focalMean(2, 'square', 'pixels', 8);
-//var landsat8_collection_fil = ee.landsat8_collection.focalMean(2, 'square', 'pixels', 8);
+//
 var landsat8_tasseled_cap = landsat8_collection.map(calculateTasseledCap);
-//console.log(landsat8_tasseled_cap.getInfo()).addToMap(landsat8_tasseled_cap,{},'Landsat 8 Tasseled Cap');
 Map.addLayer(landsat8_tasseled_cap,visualization, 'Landsat 8');
 Map.centerObject(roi,8);
+// exporting the greeness band to your google Drive - You could always add your prefered band or export all of them
 Export.image.toDrive({
   image: landsat8_tasseled_cap.select('greenness').sum(),
   scale: 30,
