@@ -1,0 +1,109 @@
+//How to perform RF supervised classification
+//Step 1 - load the data---LANDSAT/LC08/C02/T1_L2
+var dataset = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+.filterDate('2009-12-01', '20010-04-30')
+.filterBounds(roi)
+.filterMetadata('CLOUD_COVER','less_than',3);
+
+//Appliying the scaling factors
+function applyScaleFactors(image){
+ var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+  var thermalBand = image.select('SR_B6').multiply(0.00341802).add(149.0);
+ return image.addBands(opticalBands, null,true).addBands(opticalBands, null, true);
+}
+
+var rescale = dataset.map(applyScaleFactors);
+var image = rescale.median().clip(StudyArea);
+
+var visualization ={
+ bands: ['SR_B4', 'SR_B5','SR_B3'],
+ min: 0.0,
+ max: 0.3,
+};
+
+Map.addLayer(image, visualization, 'Landsat 9');
+Map.addLayer(Train, {}, 'Train');
+Map.centerObject(roi,8);
+//Create a training DataSet
+var training = agricultural_land.merge(Forest).merge(Water).merge(Urban).merge(Swamp);
+print(training);
+//Export Training Data
+//Export.table.toAsset(training);
+ 
+var label = 'Class';
+var bands = ['SR_B1', 'SR_B2','SR_B3', 'SR_B4', 'SR_B5','SR_B7'];
+var input = image.select(bands);
+
+//Overlay the points to get training
+var trainImage = input.sampleRegions({
+collection: training,
+properties: [label],
+scale: 30
+});
+//print(trainImage);
+var trainingData = trainImage.randomColumn();
+var trainSet = trainingData.filter(ee.Filter.lessThan('random',0.8));
+var testSet = trainingData.filter(ee.Filter.greaterThanOrEquals('random',0.8));
+//Classification Model
+var classifier = ee.Classifier.smileRandomForest(10)
+.train({
+	features: trainSet,
+	classProperty: label,
+	inputProperties:bands
+});
+//Classify the image
+var classified = input.classify(classifier);
+print(classified.getInfo());
+
+//Define palette for the classification
+var landcoverpalette = [
+'#11bd01', //water(5)
+'#e31a1c', //swamp(4 )
+'#005a32', //agricultural_land(3)
+'#FF8000', //forest(2)
+'#969696',//Urban(1)
+];
+Map.addLayer(classified,{palette: landcoverpalette, min: 0, max:4 },'classification');
+
+//step 4 Accuracy Assesment
+var confusionMatrix = ee.ConfusionMatrix(testSet.classify(classifier)
+.errorMatrix({
+actual: 'Class',
+predicted: 'classification'
+}));
+
+print('Confusion matrix:', confusionMatrix);
+print('Overall Accuracy:', confusionMatrix.accuracy());
+print('Producers Accuracy:', confusionMatrix.producersAccuracy());
+print('Consumers accuracy:', confusionMatrix.consumersAccuracy());
+print('Kappa:',confusionMatrix.kappa());
+
+var viz = { min:1, max:5, palette: landcoverpalette};
+Export.image.toDrive({
+  image: classified.visualize(viz),
+  description: 'Classified_2020',
+  folder: 'RS_APPS',
+  fileNamePrefix: 'ERITREA',
+  region: StudyArea,
+  scale: 30,
+  maxPixels:1e13,
+});
+//Exporting the Confusion Matrix
+var fc = ee.FeatureCollection([
+  ee.Feature(null, {
+    'accuracy': confusionMatrix.accuracy(),
+    'matrix': confusionMatrix.array(),
+    'Producers Accuracy':  confusionMatrix.producersAccuracy(),
+    'Consumers accuracy': confusionMatrix.consumersAccuracy(),
+    'Kappa': confusionMatrix.kappa()
+  })
+  ]);
+  print(fc); 
+Export.table.toDrive({
+  collection: fc,
+  description: 'Accuracy_Export',
+  folder: 'RS_APPS',
+  fileNamePrefix: 'accuracy',
+  fileFormat: 'CSV'
+});
+//Export.table.toDrive(Water,'waterpoints','RS_APPS','WTR','KML');
