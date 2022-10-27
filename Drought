@@ -1,0 +1,228 @@
+// REGION OF INTEREST
+var ROI = roi
+    .filter(ee.Filter.eq('subcounty', 'Bura Sub County'))
+    .first()
+    .geometry();
+
+Map.addLayer(ROI, {}); // Visualizing the the ROI
+
+//SPECIFING THE DATES, MONTHS AND YEARS FOR THE DROUGHT MAPPING
+var month = '03';
+var year = '2019';
+
+// Transformations for dates
+var monthn = +month; // numerical
+var yearn = +year; // numerical
+var monthn1 = monthn+1;
+if (monthn1 == 13) {
+  var monthn1 = 01;
+}
+var month1 = padLeadingZeros(monthn1,2);
+
+// Zoom to AOI
+Map.centerObject(ROI, 9);
+
+// DEFINE VIS PARAMETERS
+// Visualization Palette
+var vis =  ['d7191c', 'fdae61', 'ffffc0', 'a6d96a', '1a9641'];
+
+// SPECIFIC MONTHS FOR ANALYSIS
+// Filterout Specific Month for analysis
+var imageFilter = ee.Filter.calendarRange(monthn,monthn,'month');
+
+// selection of Historical time period for analysis
+var startDate = ee.String('2000-').cat(month);
+var endDate = ee.String((yearn-1).toString()).cat('-').cat(month1);
+if (monthn1 == 1) {
+  var endDate = ee.String((yearn).toString()).cat('-').cat(month1);
+}
+
+// LOAD DATASETS, MODIS FOR VEGETATION MAPPING-COMPUTE VCI.
+// Load Terra Vegetation Indices 16-Day Global 250m Collection of Past time period
+var collection = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(startDate, endDate).filter(imageFilter);
+
+// Scale factor for NDVI
+var factor_NDVI = function(image){
+  return image.multiply(0.0001).divide(3.2768);
+};
+
+// Map factor function for NDVI
+var ndvi = collection.select('NDVI').map(factor_NDVI);
+
+// minimum and maximum NDVI
+var minNDVI = ndvi.min();
+var maxNDVI = ndvi.max();
+
+// Specific month time to see the drought like condition
+var imageStartDate = year.concat('-',month);
+var imageEndDate = ee.String((yearn).toString()).cat('-').cat(month1);
+if (monthn1 == 1) {
+  var imageEndDate = ee.String((yearn+1).toString()).cat('-').cat(month1);
+}
+
+// Terra Vegetation Indices 16-Day Global 250m Collection of drought monitroing time period
+var image = ee.ImageCollection('MODIS/006/MOD13Q1').filterDate(imageStartDate, imageEndDate).filter(imageFilter).max();
+
+
+// VCI
+// VCI = ((NDVI - MIN_NDVI)/(MAX_NDVI - MIN_NDVI))*100
+//calculation of VCI and clipping according to the AOI
+var imageNDVI = image.select('NDVI');
+imageNDVI = factor_NDVI(imageNDVI);
+var cal1 = imageNDVI.subtract(minNDVI);
+var cal2 = maxNDVI.subtract(minNDVI);
+var VCI = cal1.divide(cal2).clip(ROI);
+print(VCI, "VCI")
+
+
+// VCI display to map
+Map.addLayer(VCI,{
+  min: -1,
+  max: 1,
+  palette: vis}, 'VCI',false);
+
+// TCI
+// VCI = ((LST - MIN_LST)/(MAX_LST- MIN_LST))*100
+// Load collection for TCI
+var collection = ee.ImageCollection('MODIS/006/MOD11A2').filterDate(startDate, endDate).filter(imageFilter);
+var lst = collection.select('LST_Day_1km');
+
+// minimum and maximum LST
+var minLST = lst.min();
+var maxLST = lst.max();
+
+// LST Collection of drought monitroing time period
+var image = ee.ImageCollection('MODIS/006/MOD11A2').filterDate(imageStartDate, imageEndDate).filter(imageFilter).max();
+var imageLST = image.select('LST_Day_1km');
+
+// calculation of TCI and clipping according to the AOI
+var TCI = (maxLST.subtract(imageLST)).divide(maxLST.subtract(minLST)).clip(ROI);
+print(TCI, "TCI")
+// TCI display to map
+Map.addLayer(TCI,{
+  min: -1,
+  max: 1,
+  palette: vis}, 'TCI',false);
+
+// VHI
+// VEGETATION HEALTH INDEX, IS USED TO DETERMINE WITH THE REGION IS DROUGHT AFFECTED OR NOT.
+// calculation of VHI
+var VHI = (VCI.multiply(0.5)).add(TCI.multiply(0.5));
+print(VHI, "VHI")
+// VHI display to map
+Map.addLayer(VHI,{
+  min: -1,
+  max: 1,
+  palette: vis}, 'VHI',false);
+
+
+// CLASSIFING THE VHI
+// VHI classification into classes based on threshold values to calculate Drought Index
+var image02 = ee.Image(VHI.lt(0.1).and(VHI.gte(-1)));
+var image04 = ee.Image(((VHI.gte(0.1)).and(VHI.lt(0.2))).multiply(2));
+var image06 = ((VHI.gte(0.2)).and(VHI.lt(0.3))).multiply(3);
+var image08 = ((VHI.gte(0.3)).and(VHI.lt(0.4))).multiply(4);
+var image10 = (VHI.gte(0.4)).multiply(5);
+var Drought_Index = (image02.add(image04).add(image06).add(image08).add(image10));
+var Drought_Index = Drought_Index.float();
+
+
+// Drought display to map
+Map.addLayer(Drought_Index,{
+  min: 1,
+  max: 5,
+  palette: vis}, 'Drought Index');
+
+// EXPORTING THE FINAL IMAGE
+// Export to Google Drive
+
+// Export.image.toDrive({
+//   image: Drought_Index,
+//   description: 'Drought_Index_VHI',
+//   fileNamePrefix: 'Drought_Index_VHI',
+//   region: ROI,
+//   scale: 1000,
+//   crs: 'EPSG:4326',
+//   skipEmptyTiles: true
+// });
+
+// GENERATING THE LEGEND IN GEE
+//////////////////////////////////////////////////////////////////////////////////
+//Drought Index Legend
+///////////////////////////////////////////////////////////////////////////////
+
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-left',
+    padding: '8px 15px'
+  }
+});
+
+// Create and add the legend title.
+var legendTitle = ui.Label({
+  value: 'Drought Index (VHI)',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '18px',
+    margin: '0 0 4px 0',
+    padding: '0'
+  }
+});
+legend.add(legendTitle);
+
+// Creates and styles 1 row of the legend.
+var makeRow = function(color, name) {
+  // Create the label that is actually the colored box.
+  var colorBox = ui.Label({
+    style: {
+      backgroundColor: '#' + color,
+      // Use padding to give the box height and width.
+      padding: '8px',
+      margin: '0 0 4px 0'
+    }
+  });
+
+  // Create the label filled with the description text.
+  var description = ui.Label({
+    value: name,
+    style: {margin: '0 0 4px 6px'}
+  });
+
+  return ui.Panel({
+    widgets: [colorBox, description],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+// Legend Rows
+legend.add(makeRow('d7191c', 'Extreme'));//1
+legend.add(makeRow('fdae61', 'Severe'));//2
+legend.add(makeRow('ffffc0', 'Moderate'));//3
+legend.add(makeRow('a6d96a', 'Mild'));//4
+legend.add(makeRow('1a9641', 'No Drought'));//5
+
+// Add Legend to Map
+Map.add(legend);
+
+// Function used for transforming dates to string and having leading 0, if necessary
+function padLeadingZeros(num, size) {
+  var s = num+"";
+  while (s.length < size) s = "0" + s;
+  return s;
+}
+
+//CHIRPS TIME SERIES CHARTS
+//Filter image collection
+var precip = chirps.filterDate('2010-01-01','2022-12-31');
+
+//Create and print rainfall chart
+
+print(ui.Chart.image.series(chirps.limit(5000),ROI,ee.Reducer.mean(),1000).setOptions({
+  title: 'Tana River PPT Over Months',
+  hAxis: {title: 'Day'},
+  vAxis:{title:'rainfall (mm/day)'}
+}));
+// Map.addLayer(Nakuru);
+// Map.centerObject(Nakuru);
+
+//LST TIME SERIES 
