@@ -3,8 +3,8 @@ var ROI = roi
     .filter(ee.Filter.eq('subcounty', 'Bura Sub County'))
     .first()
     .geometry();
-
-Map.addLayer(ROI, {}); // Visualizing the the ROI
+ // Visualizing the the ROI
+Map.addLayer(ROI, {});
 
 //SPECIFING THE DATES, MONTHS AND YEARS FOR THE DROUGHT MAPPING
 var month = '03';
