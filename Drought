@@ -222,7 +222,3 @@ print(ui.Chart.image.series(chirps.limit(5000),ROI,ee.Reducer.mean(),1000).setOp
   hAxis: {title: 'Day'},
   vAxis:{title:'rainfall (mm/day)'}
 }));
-// Map.addLayer(Nakuru);
-// Map.centerObject(Nakuru);
-
-//LST TIME SERIES 
