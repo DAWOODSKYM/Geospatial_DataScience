@@ -1,6 +1,6 @@
 # Satelite data Classification in Google Earth engine
-This repo contains javascript code used via the Js Api in Google Earth engine to perform a Random forest calssificaton on landsat satellite images
-The code utilizes Google earth engines own archive of landsat images croped to our region on interest using a shapefile.
+This repo contains javascript code used via the Js Api in Google Earth engine to perform various Geospatial Data analysis tasks on satellite images data sets
+The code utilizes Google earth engines own archive of Satellite data, which is then subset to our region on interest using a shapefile and analytics derived.
 # Problem Statement
 1. [Determination of various land use land cover of our study area using Landsat data at 30m spatial resolution](https://github.com/DAWOODSKYM/GEE/blob/f480b3849ce462a0015ae48d725446a6d473a98b/Random%20Forest%20Supervised%20claassification)
 2. [Perform a tassled cap transformation on satlellite data to analyze and map vegetation and urban development changes in our AOI](https://github.com/DAWOODSKYM/GEE/blob/f480b3849ce462a0015ae48d725446a6d473a98b/Tasseled%20Cap)
